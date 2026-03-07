@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# QLoRA config for 7-8B models (LLaMA-3 8B or Mistral 7B)
+#
+# Hardware target  : single A10G / A100 / RTX 3090 / RTX 4090 (12–24 GB VRAM)
+# Expected VRAM    : ~12 GB (QLoRA 4-bit NF4 + bfloat16 LoRA adapters)
+# Expected throughput: ~1,800–2,100 tokens/sec on A10G
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Model ─────────────────────────────────────────────────────────────────────
+model_name_or_path: "meta-llama/Meta-Llama-3-8B"
+use_flash_attention_2: false   # set true if flash-attn is installed
+
+# ── 4-bit NF4 quantisation (QLoRA) ───────────────────────────────────────────
+load_in_4bit: true
+bnb_4bit_quant_type: "nf4"          # Normal Float 4 — better than FP4 for LLMs
+bnb_4bit_compute_dtype: "bfloat16"  # dequant to bf16 for matmuls
+bnb_4bit_use_double_quant: true     # nested quantisation (~0.4 bits/param extra saving)
+
+# ── LoRA adapter ─────────────────────────────────────────────────────────────
+lora_r: 16                    # rank — higher → more capacity, more memory
+lora_alpha: 32                # scale = alpha/r = 2.0
+lora_dropout: 0.05
+lora_target_modules:          # which linear layers to inject LoRA into
+  - q_proj
+  - v_proj
+  # Uncomment for more capacity (at higher VRAM cost):
+  # - k_proj
+  # - o_proj
+  # - gate_proj
+  # - up_proj
+  # - down_proj
+lora_bias: "none"
+
+# ── Dataset ──────────────────────────────────────────────────────────────────
+dataset_name: "tatsu-lab/alpaca"
+dataset_format: "alpaca"      # "alpaca" | "sharegpt"
+max_length: 2048
+val_split_ratio: 0.05
+
+# ── Training ─────────────────────────────────────────────────────────────────
+output_dir: "output/qlora_7b"
+num_train_epochs: 3
+max_steps: -1                 # -1 → use num_train_epochs
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 4   # effective batch = 4 × 4 = 16
+learning_rate: 2.0e-4
+lr_scheduler_type: "cosine"
+warmup_ratio: 0.03
+weight_decay: 0.001
+max_grad_norm: 1.0
+seed: 42
+
+# ── Checkpointing & logging ──────────────────────────────────────────────────
+logging_steps: 10
+save_steps: 500
+eval_steps: 500
+save_total_limit: 3
+report_to: "none"             # "wandb" | "tensorboard" | "none"
+run_name: "qlora-llama3-8b"

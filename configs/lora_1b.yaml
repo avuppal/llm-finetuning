@@ -1,0 +1,54 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# LoRA config for 1B models (LLaMA-3.2 1B / SmolLM / Phi-1.5)
+#
+# Hardware target  : CPU / laptop GPU / RTX 3060 6 GB
+# Use case         : fast local iteration, CI tests, proof-of-concept
+# Expected VRAM    : ~3–4 GB
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Model ─────────────────────────────────────────────────────────────────────
+model_name_or_path: "meta-llama/Llama-3.2-1B"
+use_flash_attention_2: false
+
+# ── Precision (no 4-bit for 1B — fits in fp16 easily) ───────────────────────
+load_in_4bit: false
+bnb_4bit_quant_type: "nf4"
+bnb_4bit_compute_dtype: "float16"
+bnb_4bit_use_double_quant: false
+
+# ── LoRA adapter ─────────────────────────────────────────────────────────────
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - v_proj
+lora_bias: "none"
+
+# ── Dataset ──────────────────────────────────────────────────────────────────
+dataset_name: "tatsu-lab/alpaca"
+dataset_format: "alpaca"
+max_length: 512              # shorter context for fast iteration
+val_split_ratio: 0.05
+
+# ── Training ─────────────────────────────────────────────────────────────────
+output_dir: "output/lora_1b"
+num_train_epochs: 1
+max_steps: 500               # cap at 500 steps for quick runs
+per_device_train_batch_size: 2
+per_device_eval_batch_size: 2
+gradient_accumulation_steps: 2   # effective batch = 2 × 2 = 4
+learning_rate: 3.0e-4
+lr_scheduler_type: "cosine"
+warmup_ratio: 0.05
+weight_decay: 0.01
+max_grad_norm: 1.0
+seed: 42
+
+# ── Checkpointing & logging ──────────────────────────────────────────────────
+logging_steps: 5
+save_steps: 100
+eval_steps: 100
+save_total_limit: 2
+report_to: "none"
+run_name: "lora-llama3-1b-fast"
