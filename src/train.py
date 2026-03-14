@@ -12,12 +12,13 @@ Features
 
 Usage
 -----
-    python -m src.train --config configs/qlora_7b.yaml
+    python -m src.train --profile --config configs/qlora_7b.yaml
 """
 
 from __future__ import annotations
 
 import argparse
+import cProfile
 import logging
 import math
 import os
