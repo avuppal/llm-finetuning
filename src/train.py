@@ -313,6 +313,20 @@ def train(cfg: TrainingConfig) -> None:
     output_dir = Path(cfg.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # ── Weights & Biases ─────────────────────────────────────────────────────
+    if cfg.report_to == "wandb":
+        try:
+            import wandb
+            from dataclasses import asdict
+            wandb.init(
+                project="llm-finetuning",
+                name=cfg.run_name,
+                config=asdict(cfg),
+            )
+        except ImportError:
+            logger.warning("wandb is not installed. Defaulting to report_to='none'")
+            cfg.report_to = "none"
+
     # ── Training ─────────────────────────────────────────────────────────────
     logger.info(
         "Starting training: epochs=%d  total_steps=%d  lr=%.2e",
@@ -361,7 +375,23 @@ def train(cfg: TrainingConfig) -> None:
                         global_step, epoch + 1, avg_loss, current_lr,
                         grad_norm.item(), elapsed,
                     )
+                    if cfg.report_to == "wandb":
+                        import wandb
+                        wandb.log({
+                            "train/loss": avg_loss,
+                            "train/learning_rate": current_lr,
+                            "train/grad_norm": grad_norm.item(),
+                            "train/epoch": epoch + ((micro_step + 1) / len(train_loader)),
+                        }, step=global_step)
                     running_loss = 0.0
+
+                # Evaluation
+                if cfg.eval_steps > 0 and global_step % cfg.eval_steps == 0:
+                    val_loss = _evaluate_loss(model, val_loader)
+                    logger.info("step=%d  val_loss=%.4f", global_step, val_loss)
+                    if cfg.report_to == "wandb":
+                        import wandb
+                        wandb.log({"val/loss": val_loss}, step=global_step)
 
                 # Save checkpoint
                 if cfg.save_steps > 0 and global_step % cfg.save_steps == 0:
@@ -373,12 +403,19 @@ def train(cfg: TrainingConfig) -> None:
         # Epoch-end eval
         val_loss = _evaluate_loss(model, val_loader)
         logger.info("Epoch %d complete — val_loss=%.4f", epoch + 1, val_loss)
+        if cfg.report_to == "wandb":
+            import wandb
+            wandb.log({"val/loss": val_loss, "train/epoch": epoch + 1}, step=global_step)
 
     # ── Final save ───────────────────────────────────────────────────────────
     final_path = output_dir / "final"
     model.save_pretrained(str(final_path))
     tokenizer.save_pretrained(str(final_path))
     logger.info("Training complete. Final adapters saved → %s", final_path)
+
+    if cfg.report_to == "wandb":
+        import wandb
+        wandb.finish()
 
 
 def _evaluate_loss(model, loader) -> float:
